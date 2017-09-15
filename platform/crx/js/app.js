@@ -4,10 +4,6 @@
 
 if ( typeof browser === 'object' && this.browser.extension ) {
 	this.chrome = this.browser;
-
-	if ( !chrome.storage.sync ) {
-		chrome.storage.sync = chrome.storage.local;
-	}
 }
 
 /******************************************************************************/
@@ -50,7 +46,7 @@ vAPI.messaging = {
 		// than getting them via messaging
 		if ( vAPI.chrome
 			&& message.cmd === 'loadPrefs' && !message.getAppInfo ) {
-			chrome.storage.sync.get('cfg', function(obj) {
+			chrome.storage.local.get('cfg', function(obj) {
 				if ( typeof listener !== 'function' ) {
 					return;
 				}
@@ -86,9 +82,60 @@ if ( /^(chrome|ms-browser|moz)-extension:/.test(location.protocol) ) {
 		}
 	};
 
-	vAPI.insertHTML = function(node, str) {
-		node.innerHTML = str;
-	};
+	vAPI.insertHTML = (function() {
+		var allowedTags = /^([apbiusq]|d(iv|el)|em|h[1-6]|i(mg|ns)|s((pan|mall)|u[bp])|[bh]r|pre|code|blockquote|[ou]l|li|d[ltd]|t([rhd]|able|head|body|foot))$/i;
+		var allowedAttrs = /^(data-|(class|style)$)/i;
+		var tmpDiv = document.implementation
+			.createHTMLDocument('').createElement('div');
+
+		var cleanNode = function(container) {
+			var i = container.children.length;
+
+			while ( i-- ) {
+				var node = container.children[i];
+
+				if ( !allowedTags.test(node.nodeName) ) {
+					node.parentNode.removeChild(node);
+					continue;
+				}
+
+				var j = node.attributes.length;
+
+				while ( j-- ) {
+					if ( !allowedAttrs.test(node.attributes[j].name) ) {
+						node.removeAttribute(node.attributes[j].name);
+					}
+				}
+
+				if ( node.children.length ) {
+					cleanNode(node);
+				}
+			}
+		};
+
+		return function(node, str) {
+			if ( !node || typeof str !== 'string' ) {
+				return;
+			}
+
+			if ( str.indexOf('<') === -1 ) {
+				node.textContent = str;
+				return;
+			}
+
+			var frag = tmpDiv.ownerDocument.createDocumentFragment();
+			tmpDiv.innerHTML = str;
+			cleanNode(tmpDiv);
+
+			while ( tmpDiv.firstChild ) {
+				frag.appendChild(
+					tmpDiv.removeChild(tmpDiv.firstChild)
+				);
+			}
+
+			node.appendChild(frag);
+		};
+	})();
 }
 
 
